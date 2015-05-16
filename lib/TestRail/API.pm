@@ -1259,7 +1259,23 @@ sub getRunSummary {
 
 }
 
-=head1 RUN AS CHILD OF PLAN METHODS
+=head1 RUN AS CHILD OF PLAN METHODS=head2 B<getRunSummary(runs)>
+
+Returns array of hashrefs describing the # of tests in the run(s) with the available statuses.
+Translates custom_statuses into their system names for you.
+
+=over 4
+
+=item ARRAY C<RUNS> - runs obtained from getRun* or getChildRun* methods.
+
+=back
+
+Returns ARRAY of run HASHREFs with the added key 'run_status' holding a hashref where status_name => count.
+
+    $tr->getRunSummary($run,$run2);
+
+=cut
+
 
 =head2 B<getChildRuns(plan)>
 
@@ -1543,6 +1559,46 @@ sub getPlanByID {
     confess("Object methods must be called by an instance") unless ref($self);
     confess("Plan ID must be integer") unless $self->_checkInteger($plan_id);
     return $self->_doRequest("index.php?/api/v2/get_plan/$plan_id");
+}
+
+=head2 B<getPlanSummary(plan_ID)>
+
+Returns hashref describing the various pass, fail, etc. percentages for tests in the plan.
+
+=over 4
+
+=item SCALAR C<plan_ID> - ID of your test plan.
+
+=back
+
+    $tr->getPlanSummary($plan_id);
+
+=cut
+
+sub getPlanSummary {
+    my ($self,$plan_id) = @_;
+    return { error => "No Plan provided" } if !$plan_id;
+    my $runs = $self->getPlanByID( $plan_id );
+    $runs = $self->getChildRuns( $runs );
+    @$runs = $self->getRunSummary(@{$runs});
+    my $total_sum = 0;
+    my $ret = { plan => $plan_id };
+    foreach my $summary ( @$runs ) {
+        my @elems = keys( $summary->{'run_status'} );
+        foreach my $key ( @elems ) {
+            if ( !defined $ret->{$key} ) {
+                $ret->{"$key\_total"} = $summary->{'run_status'}->{$key};
+            } else {
+                $ret->{"$key\_total"} = $ret->{$key} + $summary->{'run_status'}->{$key};
+            }
+            $total_sum = $total_sum + $summary->{'run_status'}->{$key};
+            if ( $_ eq $elems[-1] ) { #make the percentages if you are in last element
+                return { error => "Total tests in plan do not exceed 0, nothing to summarize" } if !$total_sum;
+                $ret->{"$key\_percentage"} = sprintf( "%.2f", ( $ret->{"$key\_total"} / $total_sum ) * 100 );
+            }
+        }       
+    }
+    return $ret;
 }
 
 =head2 B<createRunInPlan (plan_id,suite_id,name,description,milestone_id,assigned_to_id,config_ids,case_ids)>
