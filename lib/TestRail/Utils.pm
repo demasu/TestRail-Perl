@@ -45,6 +45,7 @@ sub parseConfig {
     open(my $fh, '<', $homedir . '/.testrailrc') or return (undef,undef,undef);#couldn't open!
     while (<$fh>) {
         chomp;
+        next if $_ =~ /\A\s*\z/;
         @$arr = split(/=/,$_);
         if (scalar(@$arr) != 2) {
             warn("Could not parse $_ in '$homedir/.testrailrc'!\n");
