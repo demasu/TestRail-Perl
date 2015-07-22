@@ -4,7 +4,7 @@ use warnings;
 use TestRail::API;
 use Test::LWP::UserAgent::TestRailMock;
 
-use Test::More tests => 73;
+use Test::More tests => 75;
 use Test::Fatal;
 use Test::Deep;
 use Scalar::Util ();
@@ -16,7 +16,7 @@ my $pw     = $ENV{'TESTRAIL_PASSWORD'};
 #Mock if nothing is provided
 my $is_mock = (!$apiurl && !$login && !$pw);
 
-like(exception {TestRail::API->new('trash');}, qr/invalid uri/i, "Non-URIs bounce constructor");
+like(exception {TestRail::API->new('trash','bogus','bogus');}, qr/invalid uri/i, "Non-URIs bounce constructor");
 
 #XXX for some insane reason 'hokum.bogus' seems to be popular with cpantesters
 my $bogoError = exception {TestRail::API->new('http://hokum.bogus','lies','moreLies',undef,0); };
@@ -55,6 +55,10 @@ my @user_ids = map {$_->{'id'}} @$userlist;
 my @cuser_ids = $tr->userNamesToIds(@user_names);
 cmp_deeply(\@cuser_ids,\@user_ids,"userNamesToIds functions correctly");
 isnt(exception {$tr->userNamesToIds(@user_names,'potzrebie'); }, undef, "Passing invalid user name throws exception");
+
+#Test CASE TYPE method
+my $caseTypes = $tr->getCaseTypes();
+is(ref($caseTypes),'ARRAY',"getCaseTypes returns ARRAY of case types");
 
 #Test PROJECT methods
 my $project_name = 'CRUSH ALL HUMANS';
@@ -164,6 +168,10 @@ my $result = $tr->createTestResults($tests->[0]->{'id'},$statusTypes->[0]->{'id'
 ok(defined($result->{'id'}),"Can add test results");
 my $results = $tr->getTestResults($tests->[0]->{'id'});
 is($results->[0]->{'id'},$result->{'id'},"Can get results for test");
+
+#Bulk add results
+$results = $tr->bulkAddResults($new_run->{'id'}, [{ 'test_id' => $tests->[0]->{'id'},'status_id' => $statusTypes->[0]->{'id'}, "comment" => "REAPER FORCES INBOUND" }]);
+ok(defined($results->[0]->{'id'}),"Can bulk add test results");
 
 #Test status and assignedto filtering
 my $filteredTests = $tr->getTests($new_run->{'id'},[$status_ids[0]]);

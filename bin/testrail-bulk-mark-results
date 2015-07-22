@@ -1,15 +1,16 @@
 #!/usr/bin/env perl
-# ABSTRACT: List tests in a TestRail run matching the provided filters
-# PODNAME: testrail-tests
+# ABSTRACT: Bulk mark entire runs/plans (or groups of tests therein) as the provided status.
+# PODNAME: testrail-bulk-mark-results
 
-=head1 SYNOPSIS
+=head1 USAGE
 
-  testrail-tests [OPTIONS] | xargs prove -PTestrail=...
+  testrail-bulk-mark-results [OPTIONS] status [reason]
 
 =head1 DESCRIPTION
 
-testrail-tests - list tests in a run matching the provided filters.
-
+Sometimes it is useful to mark entire runs of tests when, for example, a prerequisite test in a sequence invalidates all further tests.
+For example, if a binary produced for test fails to run at all, more detailed testing will be impossible;
+it would save time to just mark everything as blocked.
 
 =head1 PARAMETERS:
 
@@ -35,15 +36,9 @@ All mandatory options not passed with the above switches, or in your ~/.testrail
 
 =over 4
 
--p --plan       : desired plan name.  Required if the run passed is a child of a plan.
+-p --plan     : desired plan name.  Required if the run passed is a child of a plan.
 
--m --match      : attempt to find filenames matching the test names in the provided directory.
-
---no-match      : attempt to find filenames that do not match test names in the provided directory.
-
--n --no-recurse : if match (or no-match) passed, do not recurse subdirectories.
-
--e --encoding   : Character encoding of arguments.  Defaults to UTF-8. See L<Encode::Supported> for supported encodings.
+-e --encoding : Character encoding of arguments.  Defaults to UTF-8. See L<Encode::Supported> for supported encodings.
 
 =back
 
@@ -53,9 +48,7 @@ All mandatory options not passed with the above switches, or in your ~/.testrail
 
 -c --config     : configuration name to filter plans in run.  Can be passed multiple times.
 
--s --status     : only list tests marked as [status] in testrail.  Can be passed multiple times.
-
--a --assignedto : only list tests assigned to user. Can be passed multiple times.
+-a --assignedto : only mark tests assigned to user. Can be passed multiple times.
 
 =back
 
@@ -69,7 +62,7 @@ All options specified thereby are overridden by passing the command-line switche
 
 =over 4
 
---mock : don't do any real HTTP requests. Used only by tests.
+--mock : don't do any real HTTP requests.
 
 --help : show this output
 
@@ -85,16 +78,19 @@ use TestRail::API;
 use TestRail::Utils;
 
 use Getopt::Long;
+Getopt::Long::Configure('pass_through');
+
 use File::HomeDir qw{my_home};
 
-my $opts ={};
+my $opts = {};
 
-#Parse config file if we are missing api url/key or user
+# Parse config file
 my $homedir = my_home() || '.';
 if (-e $homedir . '/.testrailrc') {
     $opts = TestRail::Utils::parseConfig($homedir);
 }
 
+# Override configuration with switches
 GetOptions(
     'apiurl=s'        => \$opts->{'apiurl'},
     'password=s'      => \$opts->{'password'},
@@ -103,18 +99,18 @@ GetOptions(
     'p|plan=s'        => \$opts->{'plan'},
     'r|run=s'         => \$opts->{'run'},
     'c|config=s@'     => \$opts->{'configs'},
-    's|status=s@'     => \$opts->{'statuses'},
     'a|assignedto=s@' => \$opts->{'users'},
     'mock'            => \$opts->{'mock'},
-    'm|match=s'       => \$opts->{'match'},
-    'no-match=s'      => \$opts->{'no-match'},
-    'n|no-recurse'    => \$opts->{'no-recurse'},
     'e|encoding=s'    => \$opts->{'encoding'},
     'h|help'          => \$opts->{'help'}
 );
 
 if ($opts->{help}) { TestRail::Utils::help(); }
 
+my $status = $ARGV[0];
+my $reason = $ARGV[1];
+
+die("No status to set provided.") unless $status;
 TestRail::Utils::interrogateUser($opts,qw{apiurl user password project run});
 
 if ($opts->{mock}) {
@@ -129,17 +125,7 @@ $tr->{'debug'} = 0;
 
 my ($project,$plan,$run) = TestRail::Utils::getRunInformation($tr,$opts);
 
-my ($status_ids,$user_ids);
-
-#Process statuses
-if ($opts->{'statuses'}) {
-    eval { @$status_ids = $tr->statusNamesToIds(@{$opts->{'statuses'}}); };
-    if ($@) {
-        print "$@\n";
-        exit 4;
-    }
-}
-
+my $user_ids;
 #Process assignedto ids
 if ($opts->{'users'}) {
     eval { @$user_ids = $tr->userNamesToIds(@{$opts->{'users'}}); };
@@ -149,17 +135,27 @@ if ($opts->{'users'}) {
     }
 }
 
-my $cases = $tr->getTests($run->{'id'},$status_ids,$user_ids);
+my $cases = $tr->getTests($run->{'id'},undef,$user_ids);
 
 if (!$cases) {
-    print "No cases in TestRail!\n";
+    print "No cases in TestRail to mark!\n";
     exit 3;
 }
 
-$opts->{'names-only'} = 1;
-my @tests = TestRail::Utils::findTests($opts,@$cases);
+my ($status_id) = $tr->statusNamesToIds($status);
 
-print join("\n",@tests)."\n" if scalar(@tests);
+@$cases = map {
+    {
+        'test_id' => $_->{'id'},
+        'status_id' => $status_id,
+        'comment'   => $reason,
+        'version'   => $opts->{'version'}
+    }
+} @$cases;
+
+my $results = $tr->bulkAddResults($run->{'id'},$cases);
+
+print "Successfully set the status of ".scalar(@$results)." cases to $status.\n";
 
 exit 0;
 

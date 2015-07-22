@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 
-use Test::More "tests" => 32;
+use Test::More "tests" => 30;
 
 #check plan mode
 my @args = ($^X,qw{bin/testrail-tests --apiurl http://testrail.local --user "test@fake.fake" --password "fake" -j TestProject -p "GosPlan" -r "Executing the great plan" -m t --config testConfig --mock --no-recurse});
@@ -52,8 +52,6 @@ like($out,qr/skipall\.test$/,"Gets test correctly in no plan mode, recurse");
 @args = ($^X,qw{bin/testrail-tests --apiurl http://testrail.local --user "test@fake.fake" --password "fake" -j TestProject -p "GosPlan" -r "Executing the great plan" -m t --mock --config testPlatform1});
 $out = `@args`;
 isnt($? >> 8, 0, "Exit code not OK when passing invalid configs for plan");
-chomp $out;
-like($out,qr/no such run/i,"Gets test correctly in plan mode, recurse");
 
 #check assignedto filters
 @args = ($^X,qw{bin/testrail-tests --apiurl http://testrail.local --user "test@fake.fake" --password "fake" -j TestProject -p "GosPlan" -r "Executing the great plan" --mock --config "testConfig" --assignedto teodesian});
@@ -63,7 +61,7 @@ like($out,qr/skipall\.test$/,"Gets test correctly when filtering by assignment")
 
 @args = ($^X,qw{bin/testrail-tests --apiurl http://testrail.local --user "test@fake.fake" --password "fake" -j TestProject -p "GosPlan" -r "Executing the great plan" --mock --config "testConfig" --assignedto billy});
 $out = `@args`;
-is($? >> 8, 0, "Exit code OK when filtering by assignement");
+is($? >> 8, 0, "Exit code OK when filtering by assignment");
 chomp $out;
 is($out,"","Gets no tests correctly when filtering by wrong assignment");
 
@@ -90,12 +88,9 @@ like($out,qr/\nskipall\.test$/,"Gets test correctly in no plan mode, no recurse"
 @args = ($^X,qw{bin/testrail-tests --help});
 $out = `@args`;
 is($? >> 8, 0, "Exit code OK asking for help");
-like($out,qr/usage/i,"Help output OK");
+like($out,qr/encoding of arguments/i,"Help output OK");
 
 #Verify no-match and match are mutually exclusive
-@args = ($^X,qw{bin/testrail-tests --no-match t/ --match t/qa });
+@args = ($^X,qw{bin/testrail-tests --no-match t/ --match t/qa --apiurl http://testrail.local --user "test@fake.fake" --password "fake" -j TestProject -r "TestingSuite" --mock});
 $out = `@args`;
 isnt($? >> 8, 0, "Exit code not OK asking for mutually exclusive match options");
-like($out,qr/mutually exclusive/i,"Death message OK");
-
-
